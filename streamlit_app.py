@@ -23,6 +23,17 @@ st.set_page_config(page_title="ROMI — Officer Portal", layout="wide")
 CATEGORIES = ["ATL", "BTL", "Other"]
 
 
+def month_bounds(ym):
+    """'YYYY-MM' -> (first_day, last_day) of that month."""
+    y, m = map(int, ym.split("-"))
+    first = dt.date(y, m, 1)
+    if m == 12:
+        last = dt.date(y, 12, 31)
+    else:
+        last = dt.date(y, m + 1, 1) - dt.timedelta(days=1)
+    return first, last
+
+
 def fmt_money(v):
     if v is None:
         return "—"
@@ -90,11 +101,16 @@ def page_input():
         campaign_name = st.text_input("Activity / Campaign Name *")
         category = st.selectbox("Campaign Category", CATEGORIES)
 
+        report_month = st.selectbox(
+            "Reporting Month *", romi_logic.month_options(),
+            help="Which monthly ROMI report this campaign belongs to.")
+        mb_start, mb_end = month_bounds(report_month)
+
         d1, d2 = st.columns(2)
         with d1:
-            start_date = st.date_input("Start Date *", dt.date.today())
+            start_date = st.date_input("Start Date *", mb_start)
         with d2:
-            end_date = st.date_input("End Date *", dt.date.today())
+            end_date = st.date_input("End Date *", mb_end)
 
         marketing_expense = st.number_input(
             "Marketing Expense — monthly (BDT)",
@@ -124,6 +140,7 @@ def page_input():
                 "business_unit_id": sbu_by_label[sbu_label],
                 "campaign_name": campaign_name.strip(),
                 "category": category,
+                "report_month": report_month,
                 "start_date": start_date.isoformat(),
                 "end_date": end_date.isoformat(),
                 "officer_name": officer_name.strip(),
@@ -153,6 +170,13 @@ def page_analysis():
 
     rows = [romi_logic.compute_effective(c) for c in campaigns]
 
+    # ---- Month filter (monthly basis) ----
+    months = sorted({r["report_month"] for r in rows if r["report_month"]}, reverse=True)
+    month_sel = st.selectbox("Reporting Month", ["All months"] + months,
+                             index=1 if months else 0)
+    if month_sel != "All months":
+        rows = [r for r in rows if r.get("report_month") == month_sel]
+
     # ---- Per-campaign table ----
     df = pd.DataFrame(rows)
     disp = df.rename(columns={k: v for k, v in romi_logic.COLUMN_ORDER})
@@ -173,9 +197,9 @@ def page_analysis():
     order = [v for _, v in romi_logic.COLUMN_ORDER if v in disp.columns]
     st.dataframe(disp[order], use_container_width=True, height=450)
 
-    # ---- SBU-wise totals ----
+    # ---- SBU-wise totals (for the selected month) ----
     st.divider()
-    st.subheader("SBU-wise Totals")
+    st.subheader(f"SBU-wise Totals — {month_sel}")
     by_bu = {}
     for r in rows:
         by_bu.setdefault(r["business_unit_id"], []).append(r)
