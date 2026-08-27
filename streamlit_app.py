@@ -20,6 +20,8 @@ import supabase_client as sc
 
 st.set_page_config(page_title="ROMI — Officer Portal", layout="wide")
 
+APP_VERSION = "1.1"
+
 CATEGORIES = ["ATL", "BTL", "Other"]
 
 
@@ -79,6 +81,7 @@ label_by_id = {v: k for k, v in sbu_by_label.items()}
 # Sidebar
 # ---------------------------------------------------------------------------
 st.sidebar.title("ROMI Officer Portal")
+st.sidebar.caption(f"v{APP_VERSION}")
 page = st.sidebar.radio("Navigate", ["Input Campaign", "ROMI Analysis"])
 
 
