@@ -101,10 +101,10 @@ def page_input():
         campaign_name = st.text_input("Activity / Campaign Name *")
         category = st.selectbox("Campaign Category", CATEGORIES)
 
-        report_month = st.selectbox(
-            "Reporting Month *", romi_logic.month_options(),
-            help="Which monthly ROMI report this campaign belongs to.")
+        report_month = romi_logic.current_month()
         mb_start, mb_end = month_bounds(report_month)
+        st.caption(f"Reporting Month: **{report_month}** (current month — "
+                   f"campaigns are filed for the current month only)")
 
         d1, d2 = st.columns(2)
         with d1:
@@ -170,12 +170,13 @@ def page_analysis():
 
     rows = [romi_logic.compute_effective(c) for c in campaigns]
 
-    # ---- Month filter (monthly basis) ----
-    months = sorted({r["report_month"] for r in rows if r["report_month"]}, reverse=True)
-    month_sel = st.selectbox("Reporting Month", ["All months"] + months,
-                             index=1 if months else 0)
-    if month_sel != "All months":
-        rows = [r for r in rows if r.get("report_month") == month_sel]
+    # ---- Current month only (officers see the current reporting month) ----
+    cur = romi_logic.current_month()
+    rows = [r for r in rows if r.get("report_month") == cur]
+    st.caption(f"Showing the current month: **{cur}**")
+    if not rows:
+        st.info(f"No campaigns filed for {cur} yet.")
+        return
 
     # ---- Per-campaign table ----
     df = pd.DataFrame(rows)
@@ -197,9 +198,9 @@ def page_analysis():
     order = [v for _, v in romi_logic.COLUMN_ORDER if v in disp.columns]
     st.dataframe(disp[order], use_container_width=True, height=450)
 
-    # ---- SBU-wise totals (for the selected month) ----
+    # ---- SBU-wise totals (for the current month) ----
     st.divider()
-    st.subheader(f"SBU-wise Totals — {month_sel}")
+    st.subheader(f"SBU-wise Totals — {cur}")
     by_bu = {}
     for r in rows:
         by_bu.setdefault(r["business_unit_id"], []).append(r)
