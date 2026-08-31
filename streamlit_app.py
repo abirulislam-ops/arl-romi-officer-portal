@@ -116,10 +116,10 @@ def page_input():
             end_date = st.date_input("End Date *", mb_end)
 
         marketing_expense = st.number_input(
-            "Marketing Expense — monthly (BDT)",
+            "Marketing Expense — full campaign (BDT)",
             min_value=0.0, value=0.0, step=1000.0, format="%.0f",
-            help="The campaign's marketing spend expressed per month. "
-                 "SPA will reconcile this against the ledger.",
+            help="The campaign's total marketing spend across its whole "
+                 "duration. SPA will reconcile this against the ledger.",
         )
 
         submitted = st.form_submit_button("Add Campaign", use_container_width=True)
@@ -148,7 +148,7 @@ def page_input():
                 "end_date": end_date.isoformat(),
                 "officer_name": officer_name.strip(),
                 "officer_enroll": officer_enroll.strip(),
-                "marketing_expense_monthly": float(marketing_expense),
+                "marketing_expense_total": float(marketing_expense),
             }
             try:
                 sc.insert_campaign(row)
@@ -186,15 +186,15 @@ def page_analysis():
     disp = df.rename(columns={k: v for k, v in romi_logic.COLUMN_ORDER})
     disp["SBU"] = disp["SBU"].map(label_by_id)
     disp["GP Margin (%)"] = disp["GP Margin (%)"].apply(fmt_pct)
-    disp["Actual Revenue (avg)"] = disp["Actual Revenue (avg)"].apply(fmt_money)
-    disp["Organic/Base Sales (6-mo avg)"] = disp["Organic/Base Sales (6-mo avg)"].apply(fmt_money)
-    disp["SPLY Revenue (avg)"] = disp["SPLY Revenue (avg)"].apply(fmt_money)
+    disp["Actual Revenue (full)"] = disp["Actual Revenue (full)"].apply(fmt_money)
+    disp["Organic/Base Sales (full)"] = disp["Organic/Base Sales (full)"].apply(fmt_money)
+    disp["SPLY Revenue (full)"] = disp["SPLY Revenue (full)"].apply(fmt_money)
     disp["Incremental Revenue"] = disp["Incremental Revenue"].apply(fmt_money)
     disp["Actual Profit"] = disp["Actual Profit"].apply(fmt_money)
     disp["Base Profit"] = disp["Base Profit"].apply(fmt_money)
     disp["SPLY Profit"] = disp["SPLY Profit"].apply(fmt_money)
     disp["Incremental Profit"] = disp["Incremental Profit"].apply(fmt_money)
-    disp["Marketing Expense (monthly)"] = disp["Marketing Expense (monthly)"].apply(fmt_money)
+    disp["Marketing Expense (full)"] = disp["Marketing Expense (full)"].apply(fmt_money)
     disp["ROMI (Top Line)"] = disp["ROMI (Top Line)"].apply(fmt_romi)
     disp["ROMI (Bottom Line)"] = disp["ROMI (Bottom Line)"].apply(fmt_romi)
 
