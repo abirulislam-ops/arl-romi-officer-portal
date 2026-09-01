@@ -173,10 +173,14 @@ def page_analysis():
 
     rows = [romi_logic.compute_effective(c) for c in campaigns]
 
-    # ---- Current month only (officers see the current reporting month) ----
-    cur = romi_logic.current_month()
+    # ---- Month selector (defaults to the latest reporting month) ----
+    months = sorted({c.get("report_month") for c in campaigns if c.get("report_month")}, reverse=True)
+    if months:
+        cur = st.selectbox("Reporting Month", months, index=0)
+    else:
+        cur = romi_logic.current_month()
     rows = [r for r in rows if r.get("report_month") == cur]
-    st.caption(f"Showing the current month: **{cur}**")
+    st.caption(f"Showing reporting month: **{cur}**")
     if not rows:
         st.info(f"No campaigns filed for {cur} yet.")
         return
