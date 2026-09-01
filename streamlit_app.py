@@ -187,21 +187,23 @@ def page_analysis():
 
     # ---- Per-campaign table ----
     df = pd.DataFrame(rows)
-    disp = df.rename(columns={k: v for k, v in romi_logic.COLUMN_ORDER})
-    disp["SBU"] = disp["SBU"].map(label_by_id)
-    disp["GP Margin (%)"] = disp["GP Margin (%)"].apply(fmt_pct)
-    disp["Actual Revenue (monthly avg)"] = disp["Actual Revenue (monthly avg)"].apply(fmt_money)
-    disp["Organic/Base Sales (6-mo avg)"] = disp["Organic/Base Sales (6-mo avg)"].apply(fmt_money)
-    disp["SPLY Revenue (monthly avg)"] = disp["SPLY Revenue (monthly avg)"].apply(fmt_money)
-    disp["Incremental Revenue"] = disp["Incremental Revenue"].apply(fmt_money)
-    disp["Actual Profit"] = disp["Actual Profit"].apply(fmt_money)
-    disp["Base Profit"] = disp["Base Profit"].apply(fmt_money)
-    disp["SPLY Profit"] = disp["SPLY Profit"].apply(fmt_money)
-    disp["Incremental Profit"] = disp["Incremental Profit"].apply(fmt_money)
-    disp["Marketing Expense"] = disp["Marketing Expense"].apply(fmt_money)
-    disp["ROMI (Top Line)"] = disp["ROMI (Top Line)"].apply(fmt_romi)
-    disp["ROMI (Bottom Line)"] = disp["ROMI (Bottom Line)"].apply(fmt_romi)
 
+    # Format raw columns before renaming so display labels never break the code
+    for col in ["actual_rev", "organic_rev", "sply_rev", "incr_rev",
+                "actual_profit", "base_profit", "sply_profit", "incr_profit",
+                "marketing_expense"]:
+        if col in df.columns:
+            df[col] = df[col].apply(fmt_money)
+    if "gp_margin" in df.columns:
+        df["gp_margin"] = df["gp_margin"].apply(fmt_pct)
+    if "romi_top" in df.columns:
+        df["romi_top"] = df["romi_top"].apply(fmt_romi)
+    if "romi_bottom" in df.columns:
+        df["romi_bottom"] = df["romi_bottom"].apply(fmt_romi)
+    if "business_unit_id" in df.columns:
+        df["business_unit_id"] = df["business_unit_id"].map(label_by_id)
+
+    disp = df.rename(columns={k: v for k, v in romi_logic.COLUMN_ORDER})
     order = [v for _, v in romi_logic.COLUMN_ORDER if v in disp.columns]
     st.dataframe(disp[order], use_container_width=True, height=450)
 
