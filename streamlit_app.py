@@ -22,7 +22,8 @@ st.set_page_config(page_title="ROMI — Officer Portal", layout="wide")
 
 APP_VERSION = "1.1"
 
-CATEGORIES = ["ATL", "BTL", "Other"]
+CATEGORIES = ["ATL", "Digital", "BTL", "Outdoor", "Gift & Printing",
+              "Research", "Trade Incentive Offer", "Other"]
 
 
 def month_bounds(ym):
@@ -102,7 +103,7 @@ def page_input():
             officer_enroll = st.text_input("Employee Code (Enroll) *")
 
         campaign_name = st.text_input("Activity / Campaign Name *")
-        category = st.selectbox("Campaign Category", CATEGORIES)
+        category = st.selectbox("Type of Marketing Activity", CATEGORIES)
 
         report_month = romi_logic.current_month()
         mb_start, mb_end = month_bounds(report_month)
