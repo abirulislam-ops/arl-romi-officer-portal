@@ -224,18 +224,18 @@ def page_analysis():
     tot = pd.DataFrame(tot_rows)
     tot = tot.rename(columns={
         "n_campaigns": "Campaigns",
-        "total_incr_rev": "Total Incremental Revenue",
-        "total_incr_profit": "Total Incremental Profit",
+        "total_incr_rev": "Total Marketing Revenue",
+        "total_incr_profit": "Total Marketing Profit",
         "total_marketing": "Total Marketing Expense",
         "total_romi_top": "Total ROMI (Top Line)",
         "total_romi_bottom": "Total ROMI (Bottom Line)",
     })
-    for col in ["Total Incremental Revenue", "Total Incremental Profit", "Total Marketing Expense"]:
+    for col in ["Total Marketing Revenue", "Total Marketing Profit", "Total Marketing Expense"]:
         tot[col] = tot[col].apply(fmt_money)
     tot["Total ROMI (Top Line)"] = tot["Total ROMI (Top Line)"].apply(fmt_romi)
     tot["Total ROMI (Bottom Line)"] = tot["Total ROMI (Bottom Line)"].apply(fmt_romi)
 
-    cols = ["SBU", "Campaigns", "Total Incremental Revenue", "Total Incremental Profit",
+    cols = ["SBU", "Campaigns", "Total Marketing Revenue", "Total Marketing Profit",
             "Total Marketing Expense", "Total ROMI (Top Line)", "Total ROMI (Bottom Line)"]
     st.dataframe(tot[cols], use_container_width=True)
 
