@@ -18,6 +18,7 @@ from supabase import create_client
 
 TABLE_SBU = "romi_sbu"
 TABLE_CAMPAIGN = "romi_campaign"
+TABLE_EMPLOYEE = "romi_employee"
 
 
 def _creds():
@@ -97,3 +98,33 @@ def update_campaign(campaign_id, updates: dict):
 def delete_campaign(campaign_id):
     c = get_client()
     c.table(TABLE_CAMPAIGN).delete().eq("id", campaign_id).execute()
+
+
+# ---------------------------------------------------------------------------
+# Employee roster table (officer "find your name & enroll")
+# ---------------------------------------------------------------------------
+def fetch_employees(business_unit_id=None):
+    c = get_client()
+    q = c.table(TABLE_EMPLOYEE).select("*").order("employee_name")
+    if business_unit_id is not None:
+        q = q.eq("business_unit_id", business_unit_id)
+    res = q.execute()
+    return res.data or []
+
+
+def upsert_employee(emp: dict):
+    c = get_client()
+    res = c.table(TABLE_EMPLOYEE).upsert(
+        emp, on_conflict="business_unit_id,employee_name"
+    ).execute()
+    return (res.data or [None])[0]
+
+
+def upsert_employees(rows):
+    if not rows:
+        return []
+    c = get_client()
+    res = c.table(TABLE_EMPLOYEE).upsert(
+        rows, on_conflict="business_unit_id,employee_name"
+    ).execute()
+    return res.data or []

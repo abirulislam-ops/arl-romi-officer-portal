@@ -10,6 +10,7 @@ NOTE: metrics (F/G/H/J/pool) are computed on-premise (refresh.py) since the
 DWH is office-only; freshly added campaigns show "pending" until refresh runs.
 """
 
+import calendar
 import datetime as dt
 
 import streamlit as st
@@ -89,75 +90,215 @@ page = st.sidebar.radio("Navigate", ["Input Campaign", "ROMI Analysis"])
 # ---------------------------------------------------------------------------
 # PAGE: Input Campaign (add-only)
 # ---------------------------------------------------------------------------
+def previous_month(ym):
+    """'YYYY-MM' -> 'YYYY-MM' of the prior month."""
+    y, m = map(int, ym.split("-"))
+    if m == 1:
+        return f"{y - 1:04d}-12"
+    return f"{y:04d}-{m - 1:02d}"
+
+
+def _parse_date(v):
+    if v is None:
+        return None
+    if isinstance(v, dt.datetime):
+        return v.date()
+    if isinstance(v, dt.date):
+        return v
+    if isinstance(v, str):
+        try:
+            return dt.date.fromisoformat(v[:10])
+        except Exception:
+            return None
+    try:
+        ts = pd.to_datetime(v)
+        return None if pd.isna(ts) else ts.date()
+    except Exception:
+        return None
+
+
+def _shift_month(d):
+    """Shift a date one month forward, clamping the day to the target month."""
+    d = _parse_date(d)
+    if d is None:
+        return None
+    y, m = d.year, d.month
+    ny, nm = (y + 1, 1) if m == 12 else (y, m + 1)
+    last = calendar.monthrange(ny, nm)[1]
+    return dt.date(ny, nm, min(d.day, last))
+
+
+def _empty_grid(mb_start, mb_end):
+    return pd.DataFrame([{
+        "Campaign Name": "",
+        "Type": CATEGORIES[0],
+        "Start Date": mb_start,
+        "End Date": mb_end,
+        "Expense (BDT)": 0.0,
+    }])
+
+
+def _last_month_df(bu_id, officer_enroll, officer_name):
+    """Copy the officer's previous-month campaigns (name + type, dates shifted)."""
+    prev = previous_month(romi_logic.current_month())
+    campaigns = load_campaigns()
+    mine = [c for c in campaigns
+            if c.get("business_unit_id") == bu_id
+            and c.get("report_month") == prev
+            and c.get("officer_enroll")
+            and str(c.get("officer_enroll")).strip() == str(officer_enroll).strip()]
+    if not mine and officer_name:
+        mine = [c for c in campaigns
+                if c.get("business_unit_id") == bu_id
+                and c.get("report_month") == prev
+                and c.get("officer_name")
+                and str(c.get("officer_name")).strip() == str(officer_name).strip()]
+    if not mine:
+        return None
+    rows = []
+    for c in mine:
+        cat = c.get("category") if c.get("category") in CATEGORIES else CATEGORIES[0]
+        rows.append({
+            "Campaign Name": c.get("campaign_name") or "",
+            "Type": cat,
+            "Start Date": _shift_month(c.get("start_date")),
+            "End Date": _shift_month(c.get("end_date")),
+            "Expense (BDT)": 0.0,
+        })
+    return pd.DataFrame(rows)
+
+
+GRID_COLUMN_CONFIG = {
+    "Campaign Name": st.column_config.TextColumn("Campaign Name", width="large"),
+    "Type": st.column_config.SelectboxColumn("Type", options=CATEGORIES, required=True, width="medium"),
+    "Start Date": st.column_config.DateColumn("Start Date", format="YYYY-MM-DD", width="small"),
+    "End Date": st.column_config.DateColumn("End Date", format="YYYY-MM-DD", width="small"),
+    "Expense (BDT)": st.column_config.NumberColumn("Expense (BDT)", min_value=0.0, step=1000.0, width="medium"),
+}
+
+
 def page_input():
+    if st.session_state.get("flash"):
+        st.success(st.session_state.pop("flash"))
+
     st.title("Add Marketing Campaign")
-    st.caption("Enter your campaign details. You can add as many campaigns as "
-               "you ran this month. (No edit/delete here — contact SPA for corrections.)")
+    st.caption("Select your SBU, find your name to enroll, then add one or more "
+               "campaigns in the grid below and submit them together.")
 
-    with st.form("campaign_form", clear_on_submit=True):
-        sbu_label = st.selectbox("SBU *", list(sbu_by_label.keys()))
-        c1, c2 = st.columns(2)
-        with c1:
-            officer_name = st.text_input("Your Name *")
-        with c2:
-            officer_enroll = st.text_input("Employee Code (Enroll) *")
+    # ---- 1. SBU ----
+    sbu_label = st.selectbox("SBU *", list(sbu_by_label.keys()), key="sbu_sel")
+    bu_id = sbu_by_label[sbu_label]
 
-        campaign_name = st.text_input("Activity / Campaign Name *")
-        category = st.selectbox("Type of Marketing Activity", CATEGORIES)
-
-        report_month = romi_logic.current_month()
-        mb_start, mb_end = month_bounds(report_month)
-        st.caption(f"Reporting Month: **{report_month}** (current month — "
-                   f"campaigns are filed for the current month only)")
-
-        d1, d2 = st.columns(2)
-        with d1:
-            start_date = st.date_input("Start Date *", mb_start)
-        with d2:
-            end_date = st.date_input("End Date *", mb_end)
-
-        marketing_expense = st.number_input(
-            "Marketing Expense — full campaign (BDT)",
-            min_value=0.0, value=0.0, step=1000.0, format="%.0f",
-            help="The campaign's total marketing spend across its whole "
-                 "duration. SPA will reconcile this against the ledger.",
-        )
-
-        submitted = st.form_submit_button("Add Campaign", use_container_width=True)
-
-    if submitted:
-        errors = []
-        if not campaign_name.strip():
-            errors.append("Campaign name is required.")
-        if not officer_name.strip():
-            errors.append("Name is required.")
-        if not officer_enroll.strip():
-            errors.append("Employee code is required.")
-        if start_date > end_date:
-            errors.append("Start date must be on or before end date.")
-
-        if errors:
-            for e in errors:
-                st.error(e)
+    # ---- 2. Find your name & enroll ----
+    roster = sc.fetch_employees(bu_id)
+    officer_name = ""
+    officer_enroll = ""
+    if roster:
+        opts = [f"{e.get('employee_name', '')}  —  {e.get('enroll') or 'no code'}" for e in roster]
+        opts = ["— I'm new / not in the list —"] + opts
+        sel = st.selectbox("Find your name & enroll *", opts, key="name_sel")
+        if sel == opts[0]:
+            officer_name = st.text_input("Your name *", key="new_name")
+            officer_enroll = st.text_input("Employee code (Enroll)", key="new_enroll")
         else:
-            row = {
-                "business_unit_id": sbu_by_label[sbu_label],
-                "campaign_name": campaign_name.strip(),
-                "category": category,
-                "report_month": report_month,
-                "start_date": start_date.isoformat(),
-                "end_date": end_date.isoformat(),
-                "officer_name": officer_name.strip(),
-                "officer_enroll": officer_enroll.strip(),
-                "marketing_expense_total": float(marketing_expense),
-            }
-            try:
-                sc.insert_campaign(row)
+            emp = roster[opts.index(sel) - 1]
+            officer_name = emp.get("employee_name") or ""
+            officer_enroll = emp.get("enroll") or ""
+            st.success(f"Enrolled as **{officer_name}** ({officer_enroll or 'no code'})")
+    else:
+        st.info("No employee roster for this SBU yet. Enter your name below — it will "
+                "be saved so you can pick it next time.")
+        officer_name = st.text_input("Your name *", key="new_name2")
+        officer_enroll = st.text_input("Employee code (Enroll)", key="new_enroll2")
+
+    # ---- 3. Campaign grid ----
+    report_month = romi_logic.current_month()
+    mb_start, mb_end = month_bounds(report_month)
+    st.caption(f"Reporting month: **{report_month}**")
+
+    if st.button("Copy my last month's campaigns"):
+        copied = _last_month_df(bu_id, officer_enroll, officer_name)
+        if copied is None or copied.empty:
+            st.warning("No campaigns found for you in the previous month.")
+        else:
+            st.session_state["editor_version"] = st.session_state.get("editor_version", 0) + 1
+            st.session_state["editor_prefill"] = copied
+            st.info(f"Loaded {len(copied)} campaign(s) from last month — edit and submit.")
+
+    version = st.session_state.get("editor_version", 0)
+    prefill = st.session_state.get("editor_prefill")
+    initial = prefill if (prefill is not None and version > 0) else _empty_grid(mb_start, mb_end)
+
+    edited = st.data_editor(
+        initial,
+        num_rows="dynamic",
+        column_config=GRID_COLUMN_CONFIG,
+        use_container_width=True,
+        hide_index=True,
+        key=f"editor_{version}",
+    )
+
+    if st.button("Submit all campaigns", type="primary", use_container_width=True):
+        if not officer_name.strip():
+            st.error("Please select or enter your name before submitting.")
+        else:
+            submitted_rows = [
+                r for _, r in edited.iterrows()
+                if str(r.get("Campaign Name") or "").strip()
+            ]
+            if not submitted_rows:
+                st.warning("No campaigns entered — add at least one row with a campaign name.")
+            else:
+                try:
+                    sc.upsert_employee({
+                        "business_unit_id": bu_id,
+                        "employee_name": officer_name.strip(),
+                        "enroll": officer_enroll.strip() or None,
+                    })
+                except Exception:
+                    pass
+
+                inserted, errors = 0, []
+                for r in submitted_rows:
+                    name = str(r["Campaign Name"]).strip()
+                    sd = _parse_date(r.get("Start Date"))
+                    ed = _parse_date(r.get("End Date"))
+                    raw = r.get("Expense (BDT)")
+                    try:
+                        exp = 0.0 if raw is None or pd.isna(raw) else float(raw)
+                    except (TypeError, ValueError):
+                        exp = 0.0
+                    if sd is None or ed is None:
+                        errors.append(f"'{name}': missing start/end date.")
+                        continue
+                    if sd > ed:
+                        errors.append(f"'{name}': start date after end date.")
+                        continue
+                    row = {
+                        "business_unit_id": bu_id,
+                        "campaign_name": name,
+                        "category": r.get("Type") or CATEGORIES[0],
+                        "report_month": report_month,
+                        "start_date": sd.isoformat(),
+                        "end_date": ed.isoformat(),
+                        "officer_name": officer_name.strip(),
+                        "officer_enroll": officer_enroll.strip(),
+                        "marketing_expense_total": exp,
+                    }
+                    try:
+                        sc.insert_campaign(row)
+                        inserted += 1
+                    except Exception as e:
+                        errors.append(f"'{name}': {e}")
+
                 load_campaigns.clear()
-                st.success("Campaign added. Metrics (actual/organic/SPLY revenue, "
-                           "GP margin) will appear after the next data refresh.")
-            except Exception as e:
-                st.error(f"Could not save: {e}")
+                for e in errors:
+                    st.error(e)
+                if inserted:
+                    st.session_state["flash"] = f"Added {inserted} campaign(s). Metrics appear after the next data refresh."
+                    st.session_state["editor_prefill"] = None
+                    st.session_state["editor_version"] = st.session_state.get("editor_version", 0) + 1
+                    st.rerun()
 
 
 # ---------------------------------------------------------------------------
@@ -224,18 +365,18 @@ def page_analysis():
     tot = pd.DataFrame(tot_rows)
     tot = tot.rename(columns={
         "n_campaigns": "Campaigns",
-        "total_incr_rev": "Total Marketing Revenue",
-        "total_incr_profit": "Total Marketing Profit",
+        "total_incr_rev": "Total Marketing Led Increment",
+        "total_incr_profit": "Total Marketing Led Profit",
         "total_marketing": "Total Marketing Expense",
         "total_romi_top": "Total ROMI (Top Line)",
         "total_romi_bottom": "Total ROMI (Bottom Line)",
     })
-    for col in ["Total Marketing Revenue", "Total Marketing Profit", "Total Marketing Expense"]:
+    for col in ["Total Marketing Led Increment", "Total Marketing Led Profit", "Total Marketing Expense"]:
         tot[col] = tot[col].apply(fmt_money)
     tot["Total ROMI (Top Line)"] = tot["Total ROMI (Top Line)"].apply(fmt_romi)
     tot["Total ROMI (Bottom Line)"] = tot["Total ROMI (Bottom Line)"].apply(fmt_romi)
 
-    cols = ["SBU", "Campaigns", "Total Marketing Revenue", "Total Marketing Profit",
+    cols = ["SBU", "Campaigns", "Total Marketing Led Increment", "Total Marketing Led Profit",
             "Total Marketing Expense", "Total ROMI (Top Line)", "Total ROMI (Bottom Line)"]
     st.dataframe(tot[cols], use_container_width=True)
 
