@@ -380,6 +380,32 @@ def page_analysis():
             "Total Marketing Expense", "Total ROMI (Top Line)", "Total ROMI (Bottom Line)"]
     st.dataframe(tot[cols], use_container_width=True)
 
+    # ---- Branch mark vs actual (charts + hover table) ----
+    st.divider()
+    st.subheader("Branch Mark vs Actual")
+    sbus_by_id = {int(s["business_unit_id"]): s for s in sbus}
+    bm_rows = romi_logic.benchmark_rows(rows, sbus_by_id)
+    if bm_rows:
+        top_df = pd.DataFrame({
+            "Actual": {r["code"]: r["total_romi_top"] for r in bm_rows},
+            "Mark (≥)": {r["code"]: r["benchmark_top"] for r in bm_rows if r["benchmark_top"] is not None},
+        })
+        bot_df = pd.DataFrame({
+            "Actual": {r["code"]: r["total_romi_bottom"] for r in bm_rows},
+            "Mark (≥)": {r["code"]: r["benchmark_bottom"] for r in bm_rows if r["benchmark_bottom"] is not None},
+        })
+        c1, c2 = st.columns(2)
+        with c1:
+            st.caption("Top-line ROMI — actual vs mark")
+            st.bar_chart(top_df, height=320)
+        with c2:
+            st.caption("Bottom-line ROMI — actual vs mark")
+            st.bar_chart(bot_df, height=320)
+        st.markdown(
+            romi_logic.BRANCHMARK_CSS + romi_logic.branchmark_table_html(bm_rows),
+            unsafe_allow_html=True,
+        )
+
 
 if page == "Input Campaign":
     page_input()
