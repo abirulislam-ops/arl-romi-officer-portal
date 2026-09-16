@@ -211,14 +211,14 @@ BRANCHMARK_CSS = (
 def branchmark_table_html(rows):
     """HTML branch-mark table with hover tooltips explaining each mark.
 
-    Columns: SBU | Campaigns | Mark Top | ROMI Top | Gap Top |
-             Mark Bottom | ROMI Bottom | Gap Bottom | Status.
+    Columns: SBU | Campaigns | Branch mark Top | ROMI Top | Gap Top |
+             Branch mark Bottom | ROMI Bottom | Gap Bottom | Status.
     """
     head = (
         "<table class='bm'><thead><tr>"
         "<th>SBU</th><th>Campaigns</th>"
-        "<th>Mark Top</th><th>ROMI Top</th><th>Gap Top</th>"
-        "<th>Mark Bottom</th><th>ROMI Bottom</th><th>Gap Bottom</th><th>Status</th>"
+        "<th>Branch mark Top</th><th>ROMI Top</th><th>Gap Top</th>"
+        "<th> Branch mark Bottom</th><th>ROMI Bottom</th><th>Gap Bottom</th><th>Status</th>"
         "</tr></thead><tbody>"
     )
 
